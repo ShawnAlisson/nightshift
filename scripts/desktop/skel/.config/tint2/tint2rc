@@ -1,0 +1,128 @@
+# Lumo panel: launcher, window list and clock along the bottom edge.
+
+#-------------------------------------
+# Backgrounds (ids are numbered in order, starting at 1)
+
+# 1: panel
+rounded = 0
+border_width = 1
+border_sides = T
+background_color = #1c1a27 100
+border_color = #322e45 100
+background_color_hover = #1c1a27 100
+border_color_hover = #322e45 100
+background_color_pressed = #1c1a27 100
+border_color_pressed = #322e45 100
+
+# 2: window button, idle
+rounded = 8
+border_width = 0
+border_sides = TBLR
+background_color = #262336 0
+border_color = #262336 0
+background_color_hover = #262336 100
+border_color_hover = #262336 100
+background_color_pressed = #322e45 100
+border_color_pressed = #322e45 100
+
+# 3: window button, focused
+rounded = 8
+border_width = 1
+border_sides = TBLR
+background_color = #2b2745 100
+border_color = #8b6cf0 100
+background_color_hover = #332e55 100
+border_color_hover = #a78bfa 100
+background_color_pressed = #332e55 100
+border_color_pressed = #a78bfa 100
+
+# 4: launcher icon hover
+rounded = 8
+border_width = 0
+border_sides = TBLR
+background_color = #262336 0
+border_color = #262336 0
+background_color_hover = #322e45 100
+border_color_hover = #322e45 100
+background_color_pressed = #3b3656 100
+border_color_pressed = #3b3656 100
+
+#-------------------------------------
+# Panel
+panel_items = LTC
+panel_size = 100% 44
+panel_margin = 0 0
+panel_padding = 8 6 8
+panel_background_id = 1
+wm_menu = 1
+panel_dock = 0
+panel_position = bottom center horizontal
+panel_layer = top
+strut_policy = follow_size
+panel_monitor = all
+autohide = 0
+mouse_effects = 1
+
+#-------------------------------------
+# Launcher
+launcher_padding = 4 2 6
+launcher_background_id = 0
+launcher_icon_background_id = 4
+launcher_icon_size = 28
+launcher_icon_asb = 100 0 0
+launcher_icon_hover_asb = 100 0 12
+launcher_icon_pressed_asb = 100 0 -8
+launcher_icon_theme = Papirus-Dark
+launcher_icon_theme_override = 0
+launcher_tooltip = 1
+startup_notifications = 0
+launcher_item_app = /usr/share/applications/lumo-chrome.desktop
+launcher_item_app = /usr/share/applications/pcmanfm.desktop
+launcher_item_app = /usr/share/applications/lxterminal.desktop
+
+#-------------------------------------
+# Taskbar
+taskbar_mode = single_desktop
+taskbar_hide_if_empty = 0
+taskbar_padding = 4 0 4
+taskbar_background_id = 0
+taskbar_active_background_id = 0
+taskbar_name = 0
+taskbar_distribute_size = 0
+taskbar_sort_order = none
+task_align = left
+
+#-------------------------------------
+# Tasks
+urgent_nb_of_blink = 8
+task_icon = 1
+task_text = 1
+task_centered = 0
+task_maximum_size = 200 34
+task_padding = 10 4 8
+task_tooltip = 1
+task_font = Inter 10
+task_font_color = #a39fb5 100
+task_active_font_color = #ece9f5 100
+task_icon_asb = 100 0 0
+task_active_icon_asb = 100 0 0
+task_background_id = 2
+task_active_background_id = 3
+task_urgent_background_id = 3
+task_iconified_background_id = 2
+mouse_left = toggle_iconify
+mouse_middle = none
+mouse_right = close
+mouse_scroll_up = toggle
+mouse_scroll_down = iconify
+
+#-------------------------------------
+# Clock
+time1_format = %H:%M
+time1_font = Inter Semi-Bold 11
+time2_format = %a %d %b
+time2_font = Inter 9
+clock_font_color = #ece9f5 100
+clock_padding = 10 0
+clock_background_id = 0
+clock_tooltip =

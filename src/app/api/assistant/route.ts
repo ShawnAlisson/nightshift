@@ -1,4 +1,7 @@
 import { streamChat } from "@/lib/ai";
+import type { AssistantEvent } from "@/lib/assistant-events";
+import { runComputerAgent } from "@/lib/computer/agent";
+import { isComputerUseEnabled } from "@/lib/computer/config";
 import { Conversation } from "@/lib/models/conversation";
 import { connectDB } from "@/lib/mongodb";
 import { getSessionUserId } from "@/lib/session";
@@ -50,10 +53,12 @@ export async function POST(request: Request) {
       : Conversation.updateOne(filter, { $pop: { messages: 1 } });
 
   // Await the first chunk so a provider failure becomes a clean error response.
-  const chunks = streamChat(history, request.signal);
-  let first: IteratorResult<string>;
+  const events: AsyncGenerator<AssistantEvent> = isComputerUseEnabled()
+    ? runComputerAgent(history, userId, request.signal)
+    : streamChat(history, request.signal);
+  let first: IteratorResult<AssistantEvent>;
   try {
-    first = await chunks.next();
+    first = await events.next();
   } catch (error) {
     if (!request.signal.aborted) console.error("assistant stream failed", error);
     await rollback();
@@ -68,9 +73,10 @@ export async function POST(request: Request) {
     async start(controller) {
       let failure: unknown;
       try {
-        for (let result = first; !result.done; result = await chunks.next()) {
-          reply += result.value;
-          if (!cancelled) controller.enqueue(encoder.encode(result.value));
+        for (let result = first; !result.done; result = await events.next()) {
+          if (result.value.type === "text") reply += result.value.text;
+          // One JSON event per line.
+          if (!cancelled) controller.enqueue(encoder.encode(`${JSON.stringify(result.value)}\n`));
         }
       } catch (error) {
         failure = error;
@@ -103,7 +109,7 @@ export async function POST(request: Request) {
 
   return new Response(readable, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Conversation-Id": conversation.id,
     },

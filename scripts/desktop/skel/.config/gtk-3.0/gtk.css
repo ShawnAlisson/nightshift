@@ -1,0 +1,9 @@
+/* Tints Adwaita dark with the app's violet palette. */
+@define-color theme_bg_color #1c1a27;
+@define-color theme_base_color #14121c;
+@define-color theme_fg_color #ece9f5;
+@define-color theme_text_color #ece9f5;
+@define-color theme_selected_bg_color #8b6cf0;
+@define-color theme_selected_fg_color #ffffff;
+@define-color borders #322e45;
+@define-color insensitive_bg_color #211f2e;

@@ -1,0 +1,104 @@
+# Lumo: a flat dark Openbox theme in the app's violet palette.
+# bg #1c1a27  inactive #17151f  border #322e45  text #ece9f5  muted #8e89a3  accent #8b6cf0
+
+border.width: 1
+padding.width: 10
+padding.height: 6
+window.handle.width: 0
+window.client.padding.width: 0
+menu.overlap: 2
+
+window.active.border.color: #322e45
+window.inactive.border.color: #262336
+window.active.client.color: #1c1a27
+window.inactive.client.color: #1c1a27
+
+window.active.title.bg: flat solid
+window.active.title.bg.color: #1c1a27
+window.inactive.title.bg: flat solid
+window.inactive.title.bg.color: #17151f
+window.active.title.separator.color: #1c1a27
+window.inactive.title.separator.color: #17151f
+
+window.active.label.bg: parentrelative
+window.inactive.label.bg: parentrelative
+window.active.label.text.color: #ece9f5
+window.inactive.label.text.color: #8e89a3
+window.label.text.justify: Left
+
+window.active.handle.bg: flat solid
+window.active.handle.bg.color: #1c1a27
+window.inactive.handle.bg: flat solid
+window.inactive.handle.bg.color: #17151f
+window.active.grip.bg: flat solid
+window.active.grip.bg.color: #1c1a27
+window.inactive.grip.bg: flat solid
+window.inactive.grip.bg.color: #17151f
+
+window.active.button.unpressed.bg: parentrelative
+window.active.button.unpressed.image.color: #a39fb5
+window.active.button.hover.bg: flat solid
+window.active.button.hover.bg.color: #322e45
+window.active.button.hover.image.color: #ece9f5
+window.active.button.pressed.bg: flat solid
+window.active.button.pressed.bg.color: #8b6cf0
+window.active.button.pressed.image.color: #ffffff
+window.active.button.disabled.bg: parentrelative
+window.active.button.disabled.image.color: #4a4660
+window.active.button.toggled.unpressed.bg: parentrelative
+window.active.button.toggled.unpressed.image.color: #a78bfa
+window.active.button.toggled.hover.bg: flat solid
+window.active.button.toggled.hover.bg.color: #322e45
+window.active.button.toggled.hover.image.color: #ece9f5
+window.active.button.toggled.pressed.bg: flat solid
+window.active.button.toggled.pressed.bg.color: #8b6cf0
+window.active.button.toggled.pressed.image.color: #ffffff
+
+window.inactive.button.unpressed.bg: parentrelative
+window.inactive.button.unpressed.image.color: #5d5972
+window.inactive.button.hover.bg: flat solid
+window.inactive.button.hover.bg.color: #262336
+window.inactive.button.hover.image.color: #a39fb5
+window.inactive.button.pressed.bg: flat solid
+window.inactive.button.pressed.bg.color: #8b6cf0
+window.inactive.button.pressed.image.color: #ffffff
+window.inactive.button.disabled.bg: parentrelative
+window.inactive.button.disabled.image.color: #3a3650
+window.inactive.button.toggled.unpressed.bg: parentrelative
+window.inactive.button.toggled.unpressed.image.color: #5d5972
+window.inactive.button.toggled.hover.bg: flat solid
+window.inactive.button.toggled.hover.bg.color: #262336
+window.inactive.button.toggled.hover.image.color: #a39fb5
+window.inactive.button.toggled.pressed.bg: flat solid
+window.inactive.button.toggled.pressed.bg.color: #8b6cf0
+window.inactive.button.toggled.pressed.image.color: #ffffff
+
+menu.border.width: 1
+menu.border.color: #322e45
+menu.title.bg: flat solid
+menu.title.bg.color: #262336
+menu.title.text.color: #ece9f5
+menu.title.text.justify: Left
+menu.items.bg: flat solid
+menu.items.bg.color: #1c1a27
+menu.items.text.color: #ece9f5
+menu.items.disabled.text.color: #5d5972
+menu.items.active.bg: flat solid
+menu.items.active.bg.color: #8b6cf0
+menu.items.active.text.color: #ffffff
+menu.items.active.disabled.text.color: #5d5972
+menu.separator.color: #322e45
+menu.separator.width: 1
+menu.separator.padding.width: 6
+menu.separator.padding.height: 4
+
+osd.border.width: 1
+osd.border.color: #322e45
+osd.bg: flat solid
+osd.bg.color: #1c1a27
+osd.label.bg: parentrelative
+osd.label.text.color: #ece9f5
+osd.hilight.bg: flat solid
+osd.hilight.bg.color: #8b6cf0
+osd.unhilight.bg: flat solid
+osd.unhilight.bg.color: #322e45

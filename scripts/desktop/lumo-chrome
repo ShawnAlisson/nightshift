@@ -1,0 +1,5 @@
+#!/bin/bash
+# Chrome with the flags a sandboxed microVM needs. Used by the panel launcher and at startup.
+exec google-chrome \
+  --no-sandbox --disable-dev-shm-usage --no-first-run --no-default-browser-check \
+  --start-maximized --user-data-dir="$HOME/chrome-profile" "$@"

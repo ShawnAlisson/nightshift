@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
+import type { AssistantEvent } from "@/lib/assistant-events";
 import { PROVIDERS, type ChatMessage, type Provider } from "@/lib/validations/assistant";
 
 // Mubit proxies each provider's native API; only the base URL changes.
@@ -31,18 +32,33 @@ function getApiKey() {
   return apiKey;
 }
 
+export type OpenAICompatibleProvider = "openai" | "openrouter";
+
+/** OpenAI-compatible client routed through Mubit. Also used by the computer-use agent. */
+export function getOpenAIClient(provider: OpenAICompatibleProvider) {
+  return new OpenAI({ baseURL: BASE_URLS[provider], apiKey: getApiKey() });
+}
+
+/**
+ * Without an output limit, OpenRouter reserves the model's maximum output (tens of
+ * thousands of tokens) and refuses the call if your credit can't cover that.
+ * OpenAI's newer models only accept the `max_completion_tokens` spelling.
+ */
+export const outputTokenLimit = (provider: OpenAICompatibleProvider, tokens: number) =>
+  provider === "openrouter" ? { max_tokens: tokens } : { max_completion_tokens: tokens };
+
 /** Shared by every OpenAI-compatible endpoint (OpenAI itself and OpenRouter). */
 async function* streamOpenAICompatible(
-  provider: "openai" | "openrouter",
+  provider: OpenAICompatibleProvider,
   messages: ChatMessage[],
   signal: AbortSignal,
 ) {
-  const client = new OpenAI({ baseURL: BASE_URLS[provider], apiKey: getApiKey() });
-  const stream = await client.chat.completions.create(
+  const stream = await getOpenAIClient(provider).chat.completions.create(
     {
       model: MODELS[provider],
       stream: true,
       messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
+      ...outputTokenLimit(provider, MAX_OUTPUT_TOKENS),
     },
     { signal },
   );
@@ -52,10 +68,21 @@ async function* streamOpenAICompatible(
   }
 }
 
+export const getModel = (provider: Provider) => MODELS[provider];
+
+/** Gemini client routed through Mubit. Also used by the computer-use agent. */
+export function getGeminiClient() {
+  return new GoogleGenAI({ apiKey: getApiKey(), httpOptions: { baseUrl: BASE_URLS.gemini } });
+}
+
+/** Anthropic client routed through Mubit. Also used by the computer-use agent. */
+export function getAnthropicClient() {
+  return new Anthropic({ baseURL: BASE_URLS.anthropic, apiKey: getApiKey() });
+}
+
 const streamers: Record<Provider, Streamer> = {
   async *anthropic(messages, signal) {
-    const client = new Anthropic({ baseURL: BASE_URLS.anthropic, apiKey: getApiKey() });
-    const stream = client.messages.stream(
+    const stream = getAnthropicClient().messages.stream(
       { model: MODELS.anthropic, max_tokens: MAX_OUTPUT_TOKENS, system: SYSTEM_PROMPT, messages },
       { signal },
     );
@@ -70,11 +97,7 @@ const streamers: Record<Provider, Streamer> = {
   openrouter: (messages, signal) => streamOpenAICompatible("openrouter", messages, signal),
 
   async *gemini(messages, signal) {
-    const client = new GoogleGenAI({
-      apiKey: getApiKey(),
-      httpOptions: { baseUrl: BASE_URLS.gemini },
-    });
-    const stream = await client.models.generateContentStream({
+    const stream = await getGeminiClient().models.generateContentStream({
       model: MODELS.gemini,
       contents: messages.map(({ role, content }) => ({
         role: role === "assistant" ? "model" : "user",
@@ -92,7 +115,7 @@ const streamers: Record<Provider, Streamer> = {
   },
 };
 
-function getProvider(): Provider {
+export function getProvider(): Provider {
   const configured = process.env.MUBIT_PROVIDER ?? "anthropic";
   if (!(PROVIDERS as readonly string[]).includes(configured)) {
     throw new Error(`MUBIT_PROVIDER must be one of: ${PROVIDERS.join(", ")}`);
@@ -101,6 +124,8 @@ function getProvider(): Provider {
 }
 
 /** Streams the assistant's reply as text chunks from the configured provider, via Mubit. */
-export function streamChat(messages: ChatMessage[], signal: AbortSignal) {
-  return streamers[getProvider()](messages, signal);
+export async function* streamChat(messages: ChatMessage[], signal: AbortSignal): AsyncGenerator<AssistantEvent> {
+  for await (const text of streamers[getProvider()](messages, signal)) {
+    yield { type: "text", text };
+  }
 }
