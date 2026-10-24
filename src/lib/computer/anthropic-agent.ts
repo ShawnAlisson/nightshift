@@ -4,7 +4,7 @@ import { getAnthropicClient, getModel } from "@/lib/ai";
 import type { AssistantEvent } from "@/lib/assistant-events";
 import { ActionError, planAction } from "@/lib/computer/actions";
 import type { DesktopLease } from "@/lib/computer/desktop";
-import { COMPUTER_SYSTEM_PROMPT, MAX_COMPUTER_TURNS } from "@/lib/computer/prompt";
+import { MAX_COMPUTER_TURNS } from "@/lib/computer/prompt";
 import type { ChatMessage } from "@/lib/validations/assistant";
 
 const MAX_OUTPUT_TOKENS = 4096;
@@ -31,17 +31,21 @@ export async function* runAnthropicAgent(
   history: ChatMessage[],
   desktops: DesktopLease,
   signal: AbortSignal,
+  system: string,
 ): AsyncGenerator<AssistantEvent> {
   const client = getAnthropicClient();
   const messages: Anthropic.MessageParam[] = history.map(({ role, content }) => ({ role, content }));
   let spoke = false;
 
   for (let turn = 0; turn < MAX_COMPUTER_TURNS && !signal.aborted; turn++) {
+    // Show that it is the model thinking, not a stuck action, once the first step is done.
+    if (turn > 0) yield { type: "action", label: "Thinking" };
+
     const stream = client.messages.stream(
       {
         model: getModel("anthropic"),
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: COMPUTER_SYSTEM_PROMPT,
+        system,
         // Zoom needs image processing the desktop does not provide, so it is turned off.
         tools: [{ type: "computer_toolset_20260801", configs: { zoom: { enabled: false } } }],
         messages,

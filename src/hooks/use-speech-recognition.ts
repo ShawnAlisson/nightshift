@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 // The Web Speech API is not in TypeScript's DOM types, so declare the small part used here.
 type SpeechEvent = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
@@ -29,8 +29,10 @@ const ERRORS: Record<string, string> = {
   "service-not-allowed": "Microphone access is blocked. Allow it in your browser's site settings to use voice.",
   "audio-capture": "No microphone was found.",
   network: "Voice input needs an internet connection.",
-  "no-speech": "I didn't hear anything. Try again.",
 };
+
+// Permission problems should stop hands-free listening instead of retrying forever.
+const DENIED = new Set(["not-allowed", "service-not-allowed"]);
 
 type Options = {
   /** Called as words arrive, with the text before the mic was tapped plus what was just said. */
@@ -45,6 +47,7 @@ export function useSpeechRecognition({ onTranscript, onEnd }: Options) {
   const supported = useSyncExternalStore(subscribeNever, () => !!getConstructor(), () => false);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string>();
+  const [denied, setDenied] = useState(false);
   const recognitionRef = useRef<Recognition | null>(null);
   const callbacks = useRef({ onTranscript, onEnd });
 
@@ -54,7 +57,7 @@ export function useSpeechRecognition({ onTranscript, onEnd }: Options) {
   });
   useEffect(() => () => recognitionRef.current?.abort(), []);
 
-  function start(existingText: string) {
+  const start = useCallback((existingText: string) => {
     const Recognition = getConstructor();
     if (!Recognition || recognitionRef.current) return;
 
@@ -71,7 +74,10 @@ export function useSpeechRecognition({ onTranscript, onEnd }: Options) {
       callbacks.current.onTranscript(join(spoken));
     };
     recognition.onerror = ({ error: code }) => {
-      if (code !== "aborted") setError(ERRORS[code] ?? "Voice input stopped unexpectedly.");
+      // Silence ("no-speech") is normal, and "aborted" is us stopping: neither is an error.
+      if (code === "no-speech" || code === "aborted") return;
+      if (DENIED.has(code)) setDenied(true);
+      setError(ERRORS[code] ?? "Voice input stopped unexpectedly.");
     };
     recognition.onend = () => {
       recognitionRef.current = null;
@@ -80,23 +86,24 @@ export function useSpeechRecognition({ onTranscript, onEnd }: Options) {
     };
 
     setError(undefined);
+    setDenied(false);
     recognitionRef.current = recognition;
     setListening(true);
     recognition.start();
-  }
+  }, []);
 
   /** Stop and keep what was heard. */
-  const stop = () => recognitionRef.current?.stop();
+  const stop = useCallback(() => recognitionRef.current?.stop(), []);
 
   /** Stop and drop the session without reporting a result (used when sending by keyboard). */
-  function cancel() {
+  const cancel = useCallback(() => {
     const recognition = recognitionRef.current;
     if (!recognition) return;
     recognition.onend = null;
     recognition.abort();
     recognitionRef.current = null;
     setListening(false);
-  }
+  }, []);
 
-  return { supported, listening, error, start, stop, cancel };
+  return { supported, listening, error, denied, start, stop, cancel };
 }

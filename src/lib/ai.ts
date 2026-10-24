@@ -20,11 +20,13 @@ const MODELS: Record<Provider, string> = {
   openrouter: process.env.MUBIT_OPENROUTER_MODEL ?? "anthropic/claude-haiku-4.5",
 };
 
-const SYSTEM_PROMPT =
-  "You are a helpful, concise personal assistant. Answer clearly and ask a short clarifying question when a request is ambiguous.";
+export const SPEAKABLE_STYLE =
+  "Your replies are often read aloud, so write short, plain sentences. Do not use markdown, bullet points, tables or emoji.";
+
+const SYSTEM_PROMPT = `You are a voice-first personal assistant for people with limited hand mobility. You help with everyday shopping and account tasks. Be warm, brief and clear, and ask one short question when a request is ambiguous. ${SPEAKABLE_STYLE}`;
 const MAX_OUTPUT_TOKENS = 1024;
 
-type Streamer = (messages: ChatMessage[], signal: AbortSignal) => AsyncGenerator<string>;
+type Streamer = (messages: ChatMessage[], signal: AbortSignal, system: string) => AsyncGenerator<string>;
 
 function getApiKey() {
   const apiKey = process.env.MUBIT_API_KEY;
@@ -40,25 +42,35 @@ export function getOpenAIClient(provider: OpenAICompatibleProvider) {
 }
 
 /**
+ * Request fields that differ by provider.
+ *
  * Without an output limit, OpenRouter reserves the model's maximum output (tens of
- * thousands of tokens) and refuses the call if your credit can't cover that.
- * OpenAI's newer models only accept the `max_completion_tokens` spelling.
+ * thousands of tokens) and refuses the call if your credit can't cover that. OpenAI's
+ * newer models only accept the `max_completion_tokens` spelling.
+ *
+ * MUBIT_OPENROUTER_PROVIDER (for example "google-vertex") restricts OpenRouter to that
+ * provider. With a bring-your-own-key setup this stops requests from silently falling
+ * back to OpenRouter's shared capacity, which spends OpenRouter credit.
  */
-export const outputTokenLimit = (provider: OpenAICompatibleProvider, tokens: number) =>
-  provider === "openrouter" ? { max_tokens: tokens } : { max_completion_tokens: tokens };
+export function requestExtras(provider: OpenAICompatibleProvider, tokens: number): Record<string, unknown> {
+  if (provider !== "openrouter") return { max_completion_tokens: tokens };
+  const only = process.env.MUBIT_OPENROUTER_PROVIDER;
+  return { max_tokens: tokens, ...(only && { provider: { only: [only] } }) };
+}
 
 /** Shared by every OpenAI-compatible endpoint (OpenAI itself and OpenRouter). */
 async function* streamOpenAICompatible(
   provider: OpenAICompatibleProvider,
   messages: ChatMessage[],
   signal: AbortSignal,
+  system: string,
 ) {
   const stream = await getOpenAIClient(provider).chat.completions.create(
     {
       model: MODELS[provider],
       stream: true,
-      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-      ...outputTokenLimit(provider, MAX_OUTPUT_TOKENS),
+      messages: [{ role: "system", content: system }, ...messages],
+      ...requestExtras(provider, MAX_OUTPUT_TOKENS),
     },
     { signal },
   );
@@ -68,7 +80,16 @@ async function* streamOpenAICompatible(
   }
 }
 
-export const getModel = (provider: Provider) => MODELS[provider];
+let warnedAboutDefaultModel = false;
+
+export function getModel(provider: Provider) {
+  // A silent default here once sent a Claude request to an account that only had a Gemini key.
+  if (provider === "openrouter" && !process.env.MUBIT_OPENROUTER_MODEL && !warnedAboutDefaultModel) {
+    warnedAboutDefaultModel = true;
+    console.warn(`MUBIT_OPENROUTER_MODEL is not set, so OpenRouter is using the default "${MODELS.openrouter}". Set it to the model your key serves.`);
+  }
+  return MODELS[provider];
+}
 
 /** Gemini client routed through Mubit. Also used by the computer-use agent. */
 export function getGeminiClient() {
@@ -81,9 +102,9 @@ export function getAnthropicClient() {
 }
 
 const streamers: Record<Provider, Streamer> = {
-  async *anthropic(messages, signal) {
+  async *anthropic(messages, signal, system) {
     const stream = getAnthropicClient().messages.stream(
-      { model: MODELS.anthropic, max_tokens: MAX_OUTPUT_TOKENS, system: SYSTEM_PROMPT, messages },
+      { model: MODELS.anthropic, max_tokens: MAX_OUTPUT_TOKENS, system, messages },
       { signal },
     );
     for await (const event of stream) {
@@ -93,10 +114,10 @@ const streamers: Record<Provider, Streamer> = {
     }
   },
 
-  openai: (messages, signal) => streamOpenAICompatible("openai", messages, signal),
-  openrouter: (messages, signal) => streamOpenAICompatible("openrouter", messages, signal),
+  openai: (messages, signal, system) => streamOpenAICompatible("openai", messages, signal, system),
+  openrouter: (messages, signal, system) => streamOpenAICompatible("openrouter", messages, signal, system),
 
-  async *gemini(messages, signal) {
+  async *gemini(messages, signal, system) {
     const stream = await getGeminiClient().models.generateContentStream({
       model: MODELS.gemini,
       contents: messages.map(({ role, content }) => ({
@@ -104,7 +125,7 @@ const streamers: Record<Provider, Streamer> = {
         parts: [{ text: content }],
       })),
       config: {
-        systemInstruction: SYSTEM_PROMPT,
+        systemInstruction: system,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         abortSignal: signal,
       },
@@ -124,8 +145,13 @@ export function getProvider(): Provider {
 }
 
 /** Streams the assistant's reply as text chunks from the configured provider, via Mubit. */
-export async function* streamChat(messages: ChatMessage[], signal: AbortSignal): AsyncGenerator<AssistantEvent> {
-  for await (const text of streamers[getProvider()](messages, signal)) {
+export async function* streamChat(
+  messages: ChatMessage[],
+  signal: AbortSignal,
+  extraSystem = "",
+): AsyncGenerator<AssistantEvent> {
+  const system = [SYSTEM_PROMPT, extraSystem].filter(Boolean).join("\n\n");
+  for await (const text of streamers[getProvider()](messages, signal, system)) {
     yield { type: "text", text };
   }
 }

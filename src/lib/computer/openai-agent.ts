@@ -1,14 +1,15 @@
 import "server-only";
 import type OpenAI from "openai";
-import { getModel, outputTokenLimit, type OpenAICompatibleProvider } from "@/lib/ai";
+import { getModel, requestExtras, type OpenAICompatibleProvider } from "@/lib/ai";
 import type { AssistantEvent } from "@/lib/assistant-events";
 import { ActionError, planAction, SCREEN } from "@/lib/computer/actions";
 import type { DesktopLease } from "@/lib/computer/desktop";
-import { COMPUTER_SYSTEM_PROMPT, MAX_COMPUTER_TURNS } from "@/lib/computer/prompt";
+import { MAX_COMPUTER_TURNS } from "@/lib/computer/prompt";
 import { mergeToolCallDeltas, parseArguments, type PartialToolCall } from "@/lib/computer/tool-calls";
 import type { ChatMessage } from "@/lib/validations/assistant";
 
-const MAX_OUTPUT_TOKENS = 4096;
+// Actions and short answers need little room, and providers reserve this much credit per request.
+const MAX_OUTPUT_TOKENS = 2048;
 // Older screenshots are replaced with a note so a long task stays affordable.
 const KEPT_SCREENSHOTS = 3;
 
@@ -49,9 +50,7 @@ const COMPUTER_TOOL: OpenAI.ChatCompletionTool = {
   },
 };
 
-const SYSTEM_PROMPT = `${COMPUTER_SYSTEM_PROMPT}
-
-You operate the desktop through the "computer" function. Every coordinate is in pixels on the ${SCREEN.width}x${SCREEN.height} screenshot you are shown, with (0, 0) at the top-left. Look at the latest screenshot carefully before choosing where to click.`;
+const FUNCTION_CALLING_NOTE = `You operate the desktop through the "computer" function. Every coordinate is in pixels on the ${SCREEN.width}x${SCREEN.height} screenshot you are shown, with (0, 0) at the top-left. Look at the latest screenshot carefully before choosing where to click.`;
 
 const screenshotMessage = (image: string): OpenAI.ChatCompletionUserMessageParam => ({
   role: "user",
@@ -81,21 +80,25 @@ export async function* runOpenAIAgent(
   history: ChatMessage[],
   desktops: DesktopLease,
   signal: AbortSignal,
+  system: string,
 ): AsyncGenerator<AssistantEvent> {
   const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: `${system}\n\n${FUNCTION_CALLING_NOTE}` },
     ...history.map(({ role, content }) => ({ role, content })),
   ];
   let spoke = false;
 
   for (let turn = 0; turn < MAX_COMPUTER_TURNS && !signal.aborted; turn++) {
+    // Show that it is the model thinking, not a stuck action, once the first step is done.
+    if (turn > 0) yield { type: "action", label: "Thinking" };
+
     const stream = await client.chat.completions.create(
       {
         model: getModel(provider),
         stream: true,
         messages,
         tools: [COMPUTER_TOOL],
-        ...outputTokenLimit(provider, MAX_OUTPUT_TOKENS),
+        ...requestExtras(provider, MAX_OUTPUT_TOKENS),
       },
       { signal },
     );

@@ -9,6 +9,10 @@ const START_SCRIPT = "/usr/local/bin/start-desktop.sh";
 const SESSION_TIMEOUT_MS = 15 * 60_000;
 const READY_ATTEMPTS = 30;
 const ENV = { DISPLAY };
+// Nothing on the desktop should ever wait forever: a stuck command would stall the whole reply.
+const ACTION_TIMEOUT_MS = 20_000;
+const TYPING_TIMEOUT_MS = 90_000; // typing long text is slow on purpose
+const PROBE_TIMEOUT_MS = 10_000;
 
 /** Uses an access token when configured; otherwise the SDK falls back to the OIDC token. */
 function credentials() {
@@ -49,8 +53,19 @@ export class Desktop {
     readonly viewUrl: string,
   ) {}
 
+  /** Runs a desktop command with a time limit, turning a hang or failure into an ActionError. */
+  private async run(params: { cmd: string; args: string[]; timeoutMs: number }) {
+    try {
+      return await this.sandbox.runCommand({ ...params, env: ENV });
+    } catch (error) {
+      console.error("desktop command failed", error);
+      throw new ActionError("The desktop didn't respond in time");
+    }
+  }
+
   private async xdotool(args: string[]) {
-    const result = await this.sandbox.runCommand({ cmd: "xdotool", args, env: ENV });
+    const timeoutMs = args[0] === "type" ? TYPING_TIMEOUT_MS : ACTION_TIMEOUT_MS;
+    const result = await this.run({ cmd: "xdotool", args, timeoutMs });
     if (result.exitCode !== 0) {
       throw new ActionError(`xdotool failed: ${(await result.stderr()).trim().slice(0, 300)}`);
     }
@@ -58,10 +73,10 @@ export class Desktop {
   }
 
   async screenshot() {
-    const result = await this.sandbox.runCommand({
+    const result = await this.run({
       cmd: "bash",
       args: ["-c", "import -window root -silent png:- | base64 -w0"],
-      env: ENV,
+      timeoutMs: ACTION_TIMEOUT_MS,
     });
     const data = (await result.stdout()).trim();
     if (result.exitCode !== 0 || !data) throw new ActionError("Could not capture the screen");
@@ -91,7 +106,12 @@ export class Desktop {
 }
 
 async function isDesktopUp(sandbox: Sandbox) {
-  const probe = await sandbox.runCommand({ cmd: "xdotool", args: ["getmouselocation"], env: ENV });
+  const probe = await sandbox.runCommand({
+    cmd: "xdotool",
+    args: ["getmouselocation"],
+    env: ENV,
+    timeoutMs: PROBE_TIMEOUT_MS,
+  });
   return probe.exitCode === 0;
 }
 
@@ -100,6 +120,7 @@ async function isViewerUp(sandbox: Sandbox) {
   const probe = await sandbox.runCommand({
     cmd: "bash",
     args: ["-c", `exec 3<>/dev/tcp/127.0.0.1/${NOVNC_PORT}`],
+    timeoutMs: PROBE_TIMEOUT_MS,
   });
   return probe.exitCode === 0;
 }

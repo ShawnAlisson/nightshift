@@ -5,7 +5,7 @@ import type { AssistantEvent } from "@/lib/assistant-events";
 import { ActionError, planAction } from "@/lib/computer/actions";
 import type { DesktopLease, PerformResult } from "@/lib/computer/desktop";
 import { fromGeminiCall } from "@/lib/computer/gemini-actions";
-import { COMPUTER_SYSTEM_PROMPT, MAX_COMPUTER_TURNS } from "@/lib/computer/prompt";
+import { MAX_COMPUTER_TURNS } from "@/lib/computer/prompt";
 import type { ChatMessage } from "@/lib/validations/assistant";
 
 const MAX_OUTPUT_TOKENS = 4096;
@@ -17,6 +17,7 @@ export async function* runGeminiAgent(
   history: ChatMessage[],
   desktops: DesktopLease,
   signal: AbortSignal,
+  system: string,
 ): AsyncGenerator<AssistantEvent> {
   const client = getGeminiClient();
   const contents: Content[] = history.map(({ role, content }) => ({
@@ -26,11 +27,14 @@ export async function* runGeminiAgent(
   let spoke = false;
 
   for (let turn = 0; turn < MAX_COMPUTER_TURNS && !signal.aborted; turn++) {
+    // Show that it is the model thinking, not a stuck action, once the first step is done.
+    if (turn > 0) yield { type: "action", label: "Thinking" };
+
     const stream = await client.models.generateContentStream({
       model: getModel("gemini"),
       contents,
       config: {
-        systemInstruction: COMPUTER_SYSTEM_PROMPT,
+        systemInstruction: system,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         abortSignal: signal,
         tools: [

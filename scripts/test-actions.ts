@@ -11,13 +11,13 @@ const args = (name: string, input: object) => {
 };
 
 assert.deepEqual(args("left_click", { coordinate: [500, 300] }), [
-  { xdotool: ["mousemove", "--sync", "500", "300", "click", "1"] },
+  { xdotool: ["mousemove", "500", "300", "sleep", "0.05", "click", "1"] },
 ]);
 assert.deepEqual(args("left_click", { coordinate: [5, 6], text: "ctrl+shift" }), [
-  { xdotool: ["keydown", "ctrl", "keydown", "shift", "mousemove", "--sync", "5", "6", "click", "1", "keyup", "ctrl", "keyup", "shift"] },
+  { xdotool: ["keydown", "ctrl", "keydown", "shift", "mousemove", "5", "6", "sleep", "0.05", "click", "1", "keyup", "ctrl", "keyup", "shift"] },
 ]);
 assert.deepEqual(args("double_click", { coordinate: [1, 2] }), [
-  { xdotool: ["mousemove", "--sync", "1", "2", "click", "--repeat", "2", "--delay", "80", "1"] },
+  { xdotool: ["mousemove", "1", "2", "sleep", "0.05", "click", "--repeat", "2", "--delay", "80", "1"] },
 ]);
 assert.deepEqual(args("scroll", { scroll_direction: "down", scroll_amount: 999 }), [
   { xdotool: ["click", "--repeat", "30", "--delay", "30", "5"] },
@@ -89,3 +89,67 @@ assert.deepEqual(calls[1].extra, { sig: "x" });
 assert.deepEqual(parseArguments(""), {});
 for (const bad of ['{"action":', "[1]", "null", '"str"']) assert.throws(() => parseArguments(bad), ActionError, bad);
 console.log("tool-call helpers: all checks passed");
+
+// --- Routine scheduling ---
+import { nextDueAfter, nextOccurrence } from "../src/lib/routine-schedule";
+import { parsePhrases } from "../src/lib/validations/routines";
+
+const d = (iso: string) => new Date(`${iso}T12:00:00Z`);
+const iso = (date: Date | null) => date?.toISOString().slice(0, 10) ?? null;
+assert.equal(iso(nextOccurrence("weekly", d("2026-10-24"))), "2026-10-31");
+assert.equal(iso(nextOccurrence("monthly", d("2026-01-31"))), "2026-02-28", "month-end is clamped");
+assert.equal(iso(nextOccurrence("monthly", d("2028-01-31"))), "2028-02-29", "leap year");
+assert.equal(iso(nextOccurrence("yearly", d("2028-02-29"))), "2029-02-28");
+assert.equal(nextOccurrence("once", d("2026-10-24")), null);
+// Done on time: just the next one. Done very late: skip the ones already missed.
+assert.equal(iso(nextDueAfter("weekly", d("2026-10-24"), d("2026-10-24"))), "2026-10-31");
+assert.equal(iso(nextDueAfter("weekly", d("2026-10-03"), d("2026-10-24"))), "2026-10-31");
+assert.equal(nextDueAfter("once", d("2026-10-24"), d("2026-10-24")), null);
+assert.deepEqual(parsePhrases(" the usual, my weekly shop ,, the usual "), ["the usual", "my weekly shop"]);
+assert.equal(parsePhrases("a,b,c,d,e,f,g").length, 5);
+console.log("routine scheduling: all checks passed");
+
+// --- Spoken replies ---
+import { toSpeakable } from "../src/hooks/use-speech-synthesis";
+
+assert.deepEqual(toSpeakable("**Done!** Your order is placed."), ["Done! Your order is placed."]);
+assert.deepEqual(toSpeakable("First line.\n\nSecond line."), ["First line. Second line."]);
+assert.deepEqual(toSpeakable("Milk\nBread"), ["Milk. Bread"], "a line break without punctuation becomes a pause");
+assert.deepEqual(toSpeakable("   "), []);
+const long = "This is a sentence. ".repeat(30);
+const chunks = toSpeakable(long);
+assert.ok(chunks.length > 1 && chunks.every((c) => c.length <= 200), "long text is split into short chunks");
+assert.equal(chunks.join(" ").replace(/\s+/g, " "), long.trim().replace(/\s+/g, " "), "nothing is lost");
+console.log("spoken replies: all checks passed");
+
+// --- Friendly provider errors ---
+import { assistantErrorMessage } from "../src/lib/assistant-errors";
+
+const withStatus = (status: number, message = "x") => Object.assign(new Error(message), { status });
+assert.match(assistantErrorMessage(withStatus(402)), /enough credit/);
+assert.match(assistantErrorMessage(withStatus(429)), /busy/);
+assert.match(assistantErrorMessage(withStatus(401)), /sign in/);
+assert.match(assistantErrorMessage(withStatus(400, '400 {"error":{"code":"starter_credit_tools"}}')), /starter credit/);
+assert.match(assistantErrorMessage(new Error("boom")), /couldn't respond/);
+assert.match(assistantErrorMessage("not an error object"), /couldn't respond/);
+// Provider wording never reaches the user.
+assert.doesNotMatch(assistantErrorMessage(withStatus(402, "openrouter.ai/settings/credits key c00c5971")), /openrouter|c00c5971/);
+console.log("friendly errors: all checks passed");
+
+// --- Regression: `mousemove --sync` hangs forever when the pointer is already at the target ---
+for (const [name, input] of [
+  ["left_click", { coordinate: [300, 300] }],
+  ["double_click", { coordinate: [300, 300] }],
+  ["mouse_move", { coordinate: [300, 300] }],
+  ["left_click_drag", { start_coordinate: [1, 1], coordinate: [300, 300] }],
+  ["scroll", { coordinate: [300, 300], scroll_direction: "down", scroll_amount: 3 }],
+] as const) {
+  const plan = planAction(block(name, input));
+  assert.equal(plan.kind, "steps");
+  if (plan.kind === "steps") {
+    for (const step of plan.steps) {
+      if ("xdotool" in step) assert.ok(!step.xdotool.includes("--sync"), `${name} must not use --sync`);
+    }
+  }
+}
+console.log("no --sync: all checks passed");

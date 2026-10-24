@@ -2,6 +2,8 @@ import { streamChat } from "@/lib/ai";
 import type { AssistantEvent } from "@/lib/assistant-events";
 import { runComputerAgent } from "@/lib/computer/agent";
 import { isComputerUseEnabled } from "@/lib/computer/config";
+import { assistantErrorMessage } from "@/lib/assistant-errors";
+import { getRoutineContext } from "@/lib/routines";
 import { Conversation } from "@/lib/models/conversation";
 import { connectDB } from "@/lib/mongodb";
 import { getSessionUserId } from "@/lib/session";
@@ -53,16 +55,18 @@ export async function POST(request: Request) {
       : Conversation.updateOne(filter, { $pop: { messages: 1 } });
 
   // Await the first chunk so a provider failure becomes a clean error response.
+  // The user's saved routines let "the usual" mean what this person means by it.
+  const routineContext = await getRoutineContext(userId);
   const events: AsyncGenerator<AssistantEvent> = isComputerUseEnabled()
-    ? runComputerAgent(history, userId, request.signal)
-    : streamChat(history, request.signal);
+    ? runComputerAgent(history, userId, request.signal, routineContext)
+    : streamChat(history, request.signal, routineContext);
   let first: IteratorResult<AssistantEvent>;
   try {
     first = await events.next();
   } catch (error) {
     if (!request.signal.aborted) console.error("assistant stream failed", error);
     await rollback();
-    return Response.json({ error: "The assistant couldn't respond. Please try again." }, { status: 502 });
+    return Response.json({ error: assistantErrorMessage(error) }, { status: 502 });
   }
 
   const encoder = new TextEncoder();
@@ -98,9 +102,10 @@ export async function POST(request: Request) {
       }
 
       if (cancelled) return;
+      // The response has already started, so a failure travels as an event rather than a broken stream.
+      if (failure) controller.enqueue(encoder.encode(`${JSON.stringify({ type: "error", message: assistantErrorMessage(failure) })}\n`));
       // Persisted before closing, so a finished stream means the chat is saved.
-      if (failure) controller.error(failure);
-      else controller.close();
+      controller.close();
     },
     cancel() {
       cancelled = true;

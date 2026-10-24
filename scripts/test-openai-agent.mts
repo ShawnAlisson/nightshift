@@ -26,7 +26,7 @@ const client = {
     completions: {
       create: async (params: { messages: OpenAI.ChatCompletionMessageParam[]; max_tokens?: number }) => {
         requests.push(structuredClone(params.messages));
-        assert.equal(params.max_tokens, 4096, "OpenRouter needs max_tokens");
+        assert.equal(params.max_tokens, 2048, "OpenRouter needs max_tokens");
         const chunks = turns[turn++];
         return (async function* () {
           yield* chunks;
@@ -51,13 +51,14 @@ const desktops = {
 } as unknown as DesktopLease;
 
 const events: AssistantEvent[] = [];
-for await (const event of runOpenAIAgent(client, "openrouter", [{ role: "user", content: "open it" }], desktops, new AbortController().signal)) {
+for await (const event of runOpenAIAgent(client, "openrouter", [{ role: "user", content: "open it" }], desktops, new AbortController().signal, "You are a test.")) {
   events.push(event);
 }
 
 assert.deepEqual(performed, ["left_click", "screenshot"]);
-assert.deepEqual(events.map((e) => e.type), ["text", "desktop", "action", "text"]);
-assert.equal((events[3] as { text: string }).text, "\n\nAll done.", "turns are separated");
+assert.deepEqual(events.map((e) => e.type), ["text", "desktop", "action", "action", "text"]);
+assert.equal((events[3] as { label: string }).label, "Thinking", "the wait for the model is labelled");
+assert.equal((events[4] as { text: string }).text, "\n\nAll done.", "turns are separated");
 assert.equal(turn, 2);
 
 // The second request must carry the assistant turn, its tool result, then the screenshot.

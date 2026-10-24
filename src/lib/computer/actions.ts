@@ -30,6 +30,14 @@ function point(value: unknown, name = "coordinate"): [string, string] {
   return [String(x), String(y)];
 }
 
+/**
+ * Moves the pointer, then pauses briefly so the page can react (hover menus, focus).
+ * Do not add xdotool's `--sync`: it waits forever when the pointer is already at the target.
+ */
+function moveTo(value: unknown, name?: string): string[] {
+  return ["mousemove", ...point(value, name), "sleep", "0.05"];
+}
+
 function modifiers(text: unknown) {
   if (text != null && typeof text !== "string") throw new ActionError("Unsupported click modifier");
   const mods = text ? text.toLowerCase().split("+") : [];
@@ -50,7 +58,7 @@ function click(
   const mods = modifiers(input.text);
   const args = [
     ...mods.flatMap((m) => ["keydown", m]),
-    ...(input.coordinate ? ["mousemove", "--sync", ...point(input.coordinate)] : []),
+    ...(input.coordinate ? moveTo(input.coordinate) : []),
     "click",
     ...(repeat > 1 ? ["--repeat", String(repeat), "--delay", "80"] : []),
     BUTTONS[button],
@@ -83,7 +91,7 @@ export function planAction(action: ComputerAction): Plan {
     case "triple_click":
       return steps("Triple-clicking", click(input, "left", 3));
     case "mouse_move":
-      return steps("Moving the mouse", [{ xdotool: ["mousemove", "--sync", ...point(input.coordinate)] }]);
+      return steps("Moving the mouse", [{ xdotool: moveTo(input.coordinate) }]);
     case "left_mouse_down":
       return steps("Pressing the mouse", [{ xdotool: ["mousedown", "1"] }]);
     case "left_mouse_up":
@@ -94,9 +102,9 @@ export function planAction(action: ComputerAction): Plan {
         {
           xdotool: [
             ...mods.flatMap((m) => ["keydown", m]),
-            "mousemove", "--sync", ...point(input.start_coordinate, "start_coordinate"),
-            "mousedown", "1",
-            "mousemove", "--sync", ...point(input.coordinate),
+            ...moveTo(input.start_coordinate, "start_coordinate"),
+            "mousedown", "1", "sleep", "0.1",
+            ...moveTo(input.coordinate),
             "mouseup", "1",
             ...mods.flatMap((m) => ["keyup", m]),
           ],
@@ -114,7 +122,7 @@ export function planAction(action: ComputerAction): Plan {
         {
           xdotool: [
             ...mods.flatMap((m) => ["keydown", m]),
-            ...(coordinate ? ["mousemove", "--sync", ...point(coordinate)] : []),
+            ...(coordinate ? moveTo(coordinate) : []),
             "click", "--repeat", String(clicks), "--delay", "30", SCROLL_BUTTONS[direction as keyof typeof SCROLL_BUTTONS],
             ...mods.flatMap((m) => ["keyup", m]),
           ],
