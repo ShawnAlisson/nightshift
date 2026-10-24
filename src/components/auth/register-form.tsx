@@ -6,7 +6,7 @@ import { register } from "@/actions/auth";
 import { FormField } from "@/components/auth/form-field";
 import { Button } from "@/components/ui/button";
 
-export function RegisterForm() {
+export function RegisterForm({ inviteOnly }: { inviteOnly: boolean }) {
   const [state, action, pending] = useActionState(register, undefined);
 
   return (
@@ -29,6 +29,15 @@ export function RegisterForm() {
         errors={state?.errors?.password}
         required
       />
+      {inviteOnly && (
+        <FormField
+          name="inviteCode"
+          label="Invite code"
+          autoComplete="off"
+          errors={state?.errors?.inviteCode}
+          required
+        />
+      )}
       {state?.message && (
         <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {state.message}

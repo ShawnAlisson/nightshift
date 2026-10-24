@@ -6,6 +6,7 @@ import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
 import { User } from "@/lib/models/user";
 import { createSession, deleteSession } from "@/lib/session";
+import { isInviteCodeValid, isInviteOnly } from "@/lib/signup";
 import { FormState, loginSchema, registerSchema } from "@/lib/validations/auth";
 
 const BCRYPT_COST = 12;
@@ -26,6 +27,12 @@ export async function register(_: FormState, formData: FormData): Promise<FormSt
   }
 
   const { email, password } = parsed.data;
+
+  // Checked before hashing or touching the database.
+  if (isInviteOnly() && !isInviteCodeValid(field(formData, "inviteCode").trim())) {
+    return { errors: { inviteCode: ["Invalid invite code"] }, values: input };
+  }
+
   await connectDB();
 
   let userId: string;
