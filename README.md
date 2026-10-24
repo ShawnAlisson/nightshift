@@ -2,6 +2,8 @@
 
 **A voice-first assistant that helps people with limited hand mobility handle shopping and everyday account tasks, with AI calls routed through Mubit.**
 
+![Sway landing page: get things done with your voice, not your hands](public/sc.png)
+
 Using a mouse or keyboard can make a simple weekly shop difficult. Sway lets a person describe what they need, then operates a separate cloud desktop on their behalf. The person can watch, take over when needed, and decide whether consequential actions should proceed.
 
 ## The idea
