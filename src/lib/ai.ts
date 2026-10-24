@@ -2,7 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
-import type { ChatMessage, Provider } from "@/lib/validations/assistant";
+import { PROVIDERS, type ChatMessage, type Provider } from "@/lib/validations/assistant";
 
 // Mubit proxies each provider's native API; only the base URL changes.
 const BASE_URLS: Record<Provider, string> = {
@@ -92,7 +92,15 @@ const streamers: Record<Provider, Streamer> = {
   },
 };
 
-/** Streams the assistant's reply as text chunks from the chosen provider, via Mubit. */
-export function streamChat(provider: Provider, messages: ChatMessage[], signal: AbortSignal) {
-  return streamers[provider](messages, signal);
+function getProvider(): Provider {
+  const configured = process.env.MUBIT_PROVIDER ?? "anthropic";
+  if (!(PROVIDERS as readonly string[]).includes(configured)) {
+    throw new Error(`MUBIT_PROVIDER must be one of: ${PROVIDERS.join(", ")}`);
+  }
+  return configured as Provider;
+}
+
+/** Streams the assistant's reply as text chunks from the configured provider, via Mubit. */
+export function streamChat(messages: ChatMessage[], signal: AbortSignal) {
+  return streamers[getProvider()](messages, signal);
 }

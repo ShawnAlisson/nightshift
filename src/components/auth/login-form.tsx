@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useActionState } from "react";
 import { login } from "@/actions/auth";
 import { FormField } from "@/components/auth/form-field";
@@ -9,7 +10,7 @@ export function LoginForm() {
   const [state, action, pending] = useActionState(login, undefined);
 
   return (
-    <form action={action} className="grid gap-4">
+    <form action={action} className="grid gap-5">
       <FormField
         name="email"
         label="Email"
@@ -28,11 +29,12 @@ export function LoginForm() {
         required
       />
       {state?.message && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {state.message}
         </p>
       )}
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" size="lg" disabled={pending}>
+        {pending && <Loader2 className="animate-spin" />}
         {pending ? "Signing in…" : "Sign in"}
       </Button>
     </form>

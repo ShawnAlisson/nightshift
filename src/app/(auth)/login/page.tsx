@@ -7,9 +7,9 @@ export const metadata: Metadata = { title: "Sign in" };
 
 export default function LoginPage() {
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm shadow-lg [--card-spacing:--spacing(6)]">
       <CardHeader>
-        <CardTitle>Sign in</CardTitle>
+        <CardTitle className="text-xl">Sign in</CardTitle>
         <CardDescription>Enter your email and password to continue.</CardDescription>
       </CardHeader>
       <CardContent>

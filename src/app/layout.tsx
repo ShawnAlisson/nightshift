@@ -1,29 +1,47 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { siteConfig } from "@/config/site";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const fontSans = Plus_Jakarta_Sans({
+  variable: "--font-sans-family",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const fontMono = JetBrains_Mono({
+  variable: "--font-mono-family",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: { default: "Nightshift", template: "%s | Nightshift" },
-  description: "Nightshift",
+  title: { default: siteConfig.name, template: `%s | ${siteConfig.name}` },
+  description: siteConfig.description,
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafaff" },
+    { media: "(prefers-color-scheme: dark)", color: "#14121c" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${fontSans.variable} ${fontMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <a
+          href="#main"
+          className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+        >
+          Skip to content
+        </a>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

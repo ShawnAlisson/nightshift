@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: "Invalid request" }, { status: 400 });
   }
-  const { conversationId, provider, content } = parsed.data;
+  const { conversationId, content } = parsed.data;
 
   await connectDB();
 
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       : Conversation.updateOne(filter, { $pop: { messages: 1 } });
 
   // Await the first chunk so a provider failure becomes a clean error response.
-  const chunks = streamChat(provider, history, request.signal);
+  const chunks = streamChat(history, request.signal);
   let first: IteratorResult<string>;
   try {
     first = await chunks.next();

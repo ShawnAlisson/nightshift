@@ -7,9 +7,9 @@ export const metadata: Metadata = { title: "Create account" };
 
 export default function RegisterPage() {
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm shadow-lg [--card-spacing:--spacing(6)]">
       <CardHeader>
-        <CardTitle>Create account</CardTitle>
+        <CardTitle className="text-xl">Create account</CardTitle>
         <CardDescription>Sign up with your email and a password.</CardDescription>
       </CardHeader>
       <CardContent>
