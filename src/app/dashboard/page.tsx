@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { logout } from "@/actions/auth";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/dal";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -25,11 +26,16 @@ async function Profile() {
         <h1 className="text-2xl font-semibold">Welcome</h1>
         <p className="text-muted-foreground">{user.email}</p>
       </div>
-      <form action={logout}>
-        <Button type="submit" variant="outline">
-          Sign out
-        </Button>
-      </form>
+      <div className="flex gap-3">
+        <Link href="/dashboard/assistant" className={buttonVariants()}>
+          Open assistant
+        </Link>
+        <form action={logout}>
+          <Button type="submit" variant="outline">
+            Sign out
+          </Button>
+        </form>
+      </div>
     </>
   );
 }
