@@ -14,6 +14,14 @@ const ACTION_TIMEOUT_MS = 20_000;
 const TYPING_TIMEOUT_MS = 90_000; // typing long text is slow on purpose
 const PROBE_TIMEOUT_MS = 10_000;
 
+/**
+ * Chrome flags that keep warnings off the page. Without them a fresh Chrome shows a bar about
+ * --no-sandbox (pushing the page down about 60px, so clicks miss) and, after we close it, a
+ * "restore pages?" bubble.
+ */
+export const QUIET_CHROME_FLAGS = ["--test-type", "--disable-session-crashed-bubble", "--hide-crash-restore-bubble"];
+const CLEAR_PROFILE_LOCKS = 'rm -f "$HOME"/chrome-profile/SingletonLock "$HOME"/chrome-profile/SingletonSocket "$HOME"/chrome-profile/SingletonCookie';
+
 /** Uses an access token when configured; otherwise the SDK falls back to the OIDC token. */
 function credentials() {
   const { VERCEL_TOKEN: token, VERCEL_TEAM_ID: teamId, VERCEL_PROJECT_ID: projectId } = process.env;
@@ -70,6 +78,117 @@ export class Desktop {
       throw new ActionError(`xdotool failed: ${(await result.stderr()).trim().slice(0, 300)}`);
     }
     return result;
+  }
+
+  /**
+   * Closes Chrome and starts it again, optionally with extra arguments such as a page to open.
+   * Clears Chrome's stale profile lock first, or Chrome stops at a dialog instead of opening.
+   */
+  async restartBrowser(args: string[] = ["about:blank"]) {
+    // Match the process name exactly. `pkill -f` matches whole command lines, including this very
+    // command's own, so it killed the shell before the lock files could be removed.
+    await this.run({
+      cmd: "bash",
+      // xmessage is the program Chrome uses to show its "profile in use" warning. It outlives Chrome,
+      // so earlier failed launches would otherwise leave their warnings sitting on the desktop.
+      args: ["-c", "pkill -x xmessage || true; pkill -x chrome || true; for i in $(seq 1 25); do pgrep -x chrome >/dev/null || break; sleep 0.2; done"],
+      timeoutMs: ACTION_TIMEOUT_MS,
+    });
+    await this.run({ cmd: "bash", args: ["-c", CLEAR_PROFILE_LOCKS], timeoutMs: PROBE_TIMEOUT_MS });
+    await this.sandbox.runCommand({ cmd: "lumo-chrome", args, detached: true, env: ENV });
+  }
+
+  /** Starts a clean browser and confirms a real page window opened (not a startup dialog). */
+  async ensureBrowser() {
+    await this.restartBrowser([...QUIET_CHROME_FLAGS, "about:blank"]);
+    if (!(await this.waitForTitle("about:blank", 25_000))) throw new ActionError("The browser didn't start");
+  }
+
+  /** The title of the window in front, which for Chrome is the page title. */
+  async windowTitle() {
+    const result = await this.run({ cmd: "xdotool", args: ["getactivewindow", "getwindowname"], timeoutMs: PROBE_TIMEOUT_MS });
+    return result.exitCode === 0 ? (await result.stdout()).trim() : "";
+  }
+
+  /** Waits for the page title to become something other than `from`. */
+  async waitForTitleChange(from: string, maxMs: number) {
+    for (const end = Date.now() + maxMs; Date.now() < end; await sleep(700)) {
+      const title = await this.windowTitle();
+      if (title && title !== from) return true;
+    }
+    return false;
+  }
+
+  async waitForTitle(part: string, maxMs: number) {
+    for (const end = Date.now() + maxMs; Date.now() < end; await sleep(700)) {
+      if ((await this.windowTitle()).includes(part)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Waits until the screen stops changing, which is when a page has finished loading (loading
+   * placeholders shimmer, so they keep it "changing"). Gives up after `maxMs` and carries on.
+   */
+  async settle(maxMs: number, stillPolls = 2) {
+    let last = "";
+    let still = 0;
+    for (const end = Date.now() + maxMs; Date.now() < end; await sleep(700)) {
+      const result = await this.run({
+        cmd: "bash",
+        // A small, coarse copy of the screen: enough to notice a page changing, too little to notice noise.
+        args: ["-c", "import -window root -silent -resize 96x60! -depth 5 gray:- | md5sum | cut -c1-12"],
+        timeoutMs: ACTION_TIMEOUT_MS,
+      });
+      const fingerprint = (await result.stdout()).trim();
+      still = fingerprint && fingerprint === last ? still + 1 : 0;
+      last = fingerprint;
+      if (still >= stillPolls) return true;
+    }
+    return false;
+  }
+
+  /**
+   * How colourful the screen is, from 0 (greyscale) to 1. Loading placeholders are grey and real
+   * content is not, so this tells "still loading" from "loaded" where the screen shimmers.
+   */
+  async colourfulness() {
+    const result = await this.run({
+      cmd: "bash",
+      args: [
+        "-c",
+        "import -window root -silent -resize 128x80! png:- | convert png:- -colorspace HSL -channel G -separate -format '%[fx:mean]' info:",
+      ],
+      timeoutMs: ACTION_TIMEOUT_MS,
+    });
+    return Number((await result.stdout()).trim()) || 0;
+  }
+
+  async waitForColour(atLeast: number, maxMs: number) {
+    for (const end = Date.now() + maxMs; Date.now() < end; await sleep(1000)) {
+      if ((await this.colourfulness()) >= atLeast) return true;
+    }
+    return false;
+  }
+
+  /** Glides the pointer to a point the way a hand would, then clicks. Coordinates must be on screen. */
+  async clickSmoothly(x: number, y: number) {
+    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= SCREEN.width || y >= SCREEN.height) {
+      throw new ActionError("That point is off the screen");
+    }
+    const located = await this.xdotool(["getmouselocation", "--shell"]);
+    const output = await located.stdout();
+    const fromX = Number(/X=(\d+)/.exec(output)?.[1] ?? x);
+    const fromY = Number(/Y=(\d+)/.exec(output)?.[1] ?? y);
+
+    // An ease-in-out path: slow at the start and end, quicker in the middle.
+    const STEPS = 16;
+    const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+    const moves = Array.from({ length: STEPS }, (_, i) => {
+      const t = ease((i + 1) / STEPS);
+      return ["mousemove", String(Math.round(fromX + (x - fromX) * t)), String(Math.round(fromY + (y - fromY) * t)), "sleep", "0.022"];
+    });
+    await this.xdotool([...moves.flat(), "sleep", "0.15", "click", "1"]);
   }
 
   async screenshot() {
@@ -142,6 +261,9 @@ export async function ensureDesktop(userId: string): Promise<Desktop> {
   await sandbox.extendTimeout(SESSION_TIMEOUT_MS).catch(() => undefined);
 
   if (!(await isDesktopUp(sandbox))) {
+    // A restarted sandbox is a new machine, but Chrome's profile still says another computer is
+    // using it, and Chrome stops to ask. Nothing is running yet, so the leftover locks are stale.
+    await sandbox.runCommand({ cmd: "bash", args: ["-c", CLEAR_PROFILE_LOCKS], timeoutMs: PROBE_TIMEOUT_MS });
     await sandbox.runCommand({
       cmd: START_SCRIPT,
       detached: true,

@@ -6,9 +6,13 @@ import { useRef, useState } from "react";
 import { ChatActionsProvider } from "@/components/assistant/chat-actions";
 import { useDesktop } from "@/components/assistant/desktop-provider";
 import { DesktopPanel } from "@/components/assistant/desktop-panel";
+import { RoutineCard } from "@/components/assistant/proactive-cards";
 import { VoiceOrb } from "@/components/assistant/voice-orb";
+import { MockDesktop } from "@/components/showcase/mock-desktop";
+import { Narration, TryItPanel } from "@/components/showcase/overlays";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useShowcase, useShowcaseActive } from "@/hooks/use-showcase";
 import { useVoiceMode, type VoiceState } from "@/hooks/use-voice-mode";
 import type { AssistantEvent } from "@/lib/assistant-events";
 import { errorFrom } from "@/lib/http";
@@ -42,7 +46,34 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
   const [pending, setPending] = useState(false);
   const [activity, setActivity] = useState<string>();
   const [error, setError] = useState<string>();
-  const voice = useVoiceMode({ input, onInput: setInput, busy: pending, onSubmit: (text) => void send(text) });
+  const showcaseActive = useShowcaseActive();
+  const voice = useVoiceMode({
+    input,
+    onInput: setInput,
+    busy: pending || showcaseActive,
+    onSubmit: (text) => void send(text),
+  });
+  const showcase = useShowcase({
+    reset: () => {
+      voice.interrupt();
+      setConversationId(undefined);
+      setMessages([]);
+      setInput("");
+      setError(undefined);
+      setActivity(undefined);
+      setPending(false);
+    },
+    setInput,
+    addUser: (text) => {
+      setMessages((current) => [...current, { role: "user", content: text }, { role: "assistant", content: "" }]);
+      setActivity(undefined);
+      setPending(true);
+    },
+    appendAssistant: appendToLast,
+    setActivity,
+    replyDone: () => setPending(false),
+    speak: voice.speakReply,
+  });
   const abortRef = useRef<AbortController | null>(null);
   // What the assistant said since its last action: that is the answer worth reading aloud.
   const answerRef = useRef("");
@@ -150,7 +181,10 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
     }
   }
 
+  const mockDesktop = showcase.view.desktop;
   const desktopUrl = desktop.open ? desktop.url : undefined;
+  const showcaseLiveUrl = showcase.view.liveUrl;
+  const panelVisible = Boolean(mockDesktop) || Boolean(showcaseLiveUrl) || Boolean(desktopUrl);
   const visibleError = error ?? desktop.error ?? voice.error;
   const hasText = input.trim().length > 0;
 
@@ -159,7 +193,7 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
       <div
         className={cn(
           "mx-auto flex min-h-0 w-full flex-1 flex-col gap-4 pt-4 lg:flex-row",
-          desktopUrl ? "max-w-7xl" : "max-w-3xl",
+          panelVisible ? "max-w-7xl" : "max-w-3xl",
         )}
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -174,10 +208,32 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
           <div role="log" aria-live="polite" className="flex-1 overflow-y-auto py-6">
             {messages.length === 0 ? (
               <EmptyState
-                voice={voice.supported ? voice.state : undefined}
+                voice={showcase.view.active ? (showcase.view.voice ?? "off") : voice.supported ? voice.state : undefined}
                 onToggleVoice={voice.toggle}
                 onPick={(text) => void send(text)}
-                proactive={proactive}
+                proactive={
+                  showcase.view.active ? (
+                    showcase.view.cards && (
+                      <section aria-label="Coming up" className="w-full">
+                        <h2 className="mb-3 text-left text-sm font-medium text-muted-foreground">Coming up</h2>
+                        <ul className="grid gap-3 sm:grid-cols-2">
+                          {showcase.view.cards.map((card) => (
+                            <RoutineCard
+                              key={card.id}
+                              routine={card}
+                              pressing={showcase.view.pressedCard === card.id}
+                              onRun={() => {}}
+                              onLater={() => {}}
+                              onSkip={() => {}}
+                            />
+                          ))}
+                        </ul>
+                      </section>
+                    )
+                  ) : (
+                    proactive
+                  )
+                }
               />
             ) : (
               <div className="grid gap-5">
@@ -213,6 +269,7 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
                 voice.typing();
               }}
               onKeyDown={onKeyDown}
+              readOnly={showcase.view.active}
               maxLength={MAX_MESSAGE_LENGTH}
               rows={1}
               placeholder={voice.state === "listening" ? "Listening…" : "Message your assistant…"}
@@ -263,7 +320,7 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
                       variant={voice.state === "listening" ? "destructive" : hasText || pending ? "ghost" : "default"}
                       aria-label={voice.state === "listening" ? "Stop listening" : "Turn voice on"}
                       aria-pressed={voice.state === "listening"}
-                      disabled={pending}
+                      disabled={pending || showcase.view.active}
                       onClick={voice.toggle}
                       className="relative"
                     >
@@ -275,7 +332,16 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
                   </>
                 )}
                 {pending ? (
-                  <Button type="button" size="icon" variant="outline" aria-label="Stop" onClick={() => abortRef.current?.abort()}>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    aria-label="Stop"
+                    onClick={() => {
+                      abortRef.current?.abort();
+                      showcase.stop();
+                    }}
+                  >
                     <Square className="fill-current" />
                   </Button>
                 ) : (
@@ -290,10 +356,18 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
           </form>
         </div>
 
-        {desktopUrl && (
-          <DesktopPanel url={desktopUrl} stopping={desktop.busy === "stopping"} onHide={desktop.hide} onStop={desktop.stop} />
+        {mockDesktop ? (
+          <DesktopPanel picture={<MockDesktop state={mockDesktop} />} stopping={false} onHide={showcase.stop} onStop={showcase.stop} />
+        ) : showcaseLiveUrl ? (
+          <DesktopPanel url={showcaseLiveUrl} stopping={false} onHide={showcase.stop} onStop={showcase.stop} />
+        ) : (
+          desktopUrl && (
+            <DesktopPanel url={desktopUrl} stopping={desktop.busy === "stopping"} onHide={desktop.hide} onStop={desktop.stop} />
+          )
         )}
       </div>
+      <Narration view={showcase.view} onStop={showcase.stop} />
+      {showcase.view.ending && <TryItPanel onClose={showcase.close} />}
     </ChatActionsProvider>
   );
 }

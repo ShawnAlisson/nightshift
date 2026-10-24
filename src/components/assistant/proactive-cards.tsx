@@ -59,16 +59,19 @@ function dueText(days: number) {
   return `Due in ${days} days`;
 }
 
-function RoutineCard({
+export function RoutineCard({
   routine,
   onRun,
   onLater,
   onSkip,
+  pressing = false,
 }: {
   routine: RoutineSummary;
   onRun: () => void;
   onLater: () => void;
   onSkip: () => void;
+  /** Draws the card as if its main button is being pressed. */
+  pressing?: boolean;
 }) {
   const days = useDaysUntil(routine.dueAt);
   const urgent = days !== null && days <= 0;
@@ -79,6 +82,7 @@ function RoutineCard({
       className={cn(
         "flex flex-col gap-3 rounded-2xl bg-card p-4 text-left shadow-sm ring-1",
         urgent ? "ring-primary/40" : "ring-foreground/10",
+        pressing && "scale-[1.02] ring-2 ring-primary transition-transform",
       )}
     >
       <div className="flex items-start gap-3">
@@ -95,7 +99,7 @@ function RoutineCard({
       </div>
       <p className="line-clamp-2 text-sm text-muted-foreground">{routine.instruction}</p>
       <div className="mt-auto flex items-center gap-2">
-        <Button size="lg" className="flex-1" onClick={onRun}>
+        <Button size="lg" className={cn("flex-1", pressing && "ring-4 ring-primary/40")} onClick={onRun}>
           <Sparkles />
           Do it now
         </Button>

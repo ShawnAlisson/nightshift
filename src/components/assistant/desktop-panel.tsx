@@ -2,7 +2,10 @@ import { Loader2, Power, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type DesktopPanelProps = {
-  url: string;
+  /** The live view. Omit when showing `picture` instead. */
+  url?: string;
+  /** A drawn desktop shown in place of the live view. */
+  picture?: React.ReactNode;
   stopping: boolean;
   onHide: () => void;
   onStop: () => void;
@@ -12,7 +15,7 @@ type DesktopPanelProps = {
  * The assistant's desktop, framed like a small window. Beside the chat on large
  * screens, above it on small ones.
  */
-export function DesktopPanel({ url, stopping, onHide, onStop }: DesktopPanelProps) {
+export function DesktopPanel({ url, picture, stopping, onHide, onStop }: DesktopPanelProps) {
   return (
     <section
       aria-label="Assistant desktop"
@@ -28,12 +31,16 @@ export function DesktopPanel({ url, stopping, onHide, onStop }: DesktopPanelProp
         </Button>
       </header>
       <div className="min-h-0 flex-1 p-3">
-        <iframe
-          src={url}
-          title="Assistant desktop"
-          allow="clipboard-read; clipboard-write"
-          className="size-full rounded-lg bg-[#14121c]"
-        />
+        {picture ? (
+          <div className="size-full overflow-hidden rounded-lg">{picture}</div>
+        ) : (
+          <iframe
+            src={url}
+            title="Assistant desktop"
+            allow="clipboard-read; clipboard-write"
+            className="size-full rounded-lg bg-[#14121c]"
+          />
+        )}
       </div>
     </section>
   );

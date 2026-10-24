@@ -36,6 +36,10 @@ fi
 xsetroot -cursor_name left_ptr -solid '#14121c' 2>/dev/null
 [ -f "$SHARE/wallpaper.png" ] && feh --no-fehbg --bg-fill "$SHARE/wallpaper.png" 2>/dev/null
 
+# Chrome refuses to start if the profile says another computer is using it, which is what a
+# restored sandbox looks like. Nothing is running yet, so the old locks are stale.
+rm -f "$HOME/chrome-profile/SingletonLock" "$HOME/chrome-profile/SingletonSocket" "$HOME/chrome-profile/SingletonCookie"
+
 openbox >/tmp/openbox.log 2>&1 &
 sleep 1
 tint2 >/tmp/tint2.log 2>&1 &

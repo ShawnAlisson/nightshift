@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "desktop:snapshot": "tsx --env-file=.env.local scripts/create-desktop-snapshot.mts",
-    "test:actions": "tsx scripts/test-actions.ts && tsx --conditions react-server scripts/test-openai-agent.mts"
+    "test:actions": "tsx scripts/test-actions.ts && tsx --conditions react-server scripts/test-openai-agent.mts && tsx scripts/test-showcase.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

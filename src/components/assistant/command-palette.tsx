@@ -2,7 +2,7 @@
 
 import { Check, Loader2, MessageSquare, Pencil, Search, SquarePen, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { deleteConversation, renameConversation, searchConversations } from "@/actions/conversations";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +15,13 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import type { ConversationSummary } from "@/lib/conversations";
+import { showcaseStore } from "@/lib/showcase/store";
 import { MAX_SEARCH_LENGTH, MAX_TITLE_LENGTH } from "@/lib/validations/assistant";
 
 const SEARCH_DEBOUNCE_MS = 200;
+// A hidden command: typing exactly this into the box starts the guided walkthrough.
+const WALKTHROUGH_COMMAND = "/demo";
+const isWalkthroughCommand = (text: string) => text.trim().toLowerCase() === WALKTHROUGH_COMMAND;
 
 // The keyboard hint depends on the platform, which the server can't know: empty there, real in the browser.
 const subscribeNever = () => () => {};
@@ -35,19 +39,30 @@ export function CommandPalette() {
   const [error, setError] = useState<string>();
   const shortcut = useSyncExternalStore(subscribeNever, platformShortcut, () => "");
 
+  const changeOpen = useCallback((next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setQuery("");
+      setRenaming(undefined);
+      setDeleting(undefined);
+      setError(undefined);
+    }
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setOpen((current) => !current);
+        changeOpen(!open);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [open, changeOpen]);
 
   useEffect(() => {
-    if (!open) return;
+    // The command is not a search, so don't send it to the server.
+    if (!open || isWalkthroughCommand(query)) return;
     let stale = false;
     const timer = setTimeout(
       async () => {
@@ -66,14 +81,16 @@ export function CommandPalette() {
     };
   }, [open, query]);
 
-  function changeOpen(next: boolean) {
-    setOpen(next);
-    if (!next) {
-      setQuery("");
-      setRenaming(undefined);
-      setDeleting(undefined);
-      setError(undefined);
-    }
+  /** Closes the box and starts the walkthrough on a fresh chat. */
+  function startWalkthrough() {
+    changeOpen(false);
+    showcaseStore.request();
+    if (window.location.pathname !== "/assistant") router.push("/assistant");
+  }
+
+  function onQueryChange(value: string) {
+    setQuery(value);
+    if (isWalkthroughCommand(value)) startWalkthrough();
   }
 
   function go(href: string) {
@@ -134,7 +151,7 @@ export function CommandPalette() {
         <Command shouldFilter={false}>
           <CommandInput
             value={query}
-            onValueChange={setQuery}
+            onValueChange={onQueryChange}
             maxLength={MAX_SEARCH_LENGTH}
             placeholder="Search conversations…"
           />
