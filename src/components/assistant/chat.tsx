@@ -205,7 +205,9 @@ export function Chat({ conversationId: initialId, initialMessages = [], desktopT
             </Button>
           </div>
 
-          <div role="log" aria-live="polite" className="flex-1 overflow-y-auto py-6">
+          {/* The scroll area is wider than the column by its own padding. Scrolling clips whatever sticks out,
+              which cut off the cards' outline and shadow at the sides and made them look jammed. */}
+          <div role="log" aria-live="polite" className="-mx-3 flex-1 overflow-y-auto px-3 py-6">
             {messages.length === 0 ? (
               <EmptyState
                 voice={showcase.view.active ? (showcase.view.voice ?? "off") : voice.supported ? voice.state : undefined}
@@ -427,7 +429,7 @@ function EmptyState({ voice, onToggleVoice, onPick, proactive }: EmptyStateProps
   return (
     // my-auto (not justify-center) keeps the top reachable when the cards make this taller than the screen.
     <div className="flex min-h-full flex-col items-center text-center">
-      <div className="my-auto flex w-full flex-col items-center gap-8 py-4">
+      <div className="my-auto flex w-full flex-col items-center gap-8 px-3 py-4">
         {voice && voice !== "unsupported" ? (
           <VoiceOrb state={voice} onToggle={onToggleVoice} />
         ) : (
