@@ -2,8 +2,9 @@ import { InferSchemaType, Model, Schema, model, models } from "mongoose";
 
 const userSchema = new Schema(
   {
-    name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    // Never returned by default; select it explicitly when verifying a login.
+    passwordHash: { type: String, required: true, select: false },
   },
   { timestamps: true },
 );
